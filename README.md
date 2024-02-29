@@ -1,6 +1,8 @@
 
 ## price-volatility-trading-bot
 
+This is my old project which I fix and enjoy from time to time - be warned!
+
 This is simple and easy to use trading bot written in Rust which supports (currently) Binance 
 crypto exchange where it monitors trading actions and builds it's own internal in-memory database 
 about short term trends amongst crypt pairs traded on the exchange. 
