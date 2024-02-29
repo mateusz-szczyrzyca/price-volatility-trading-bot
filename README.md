@@ -16,8 +16,7 @@ More details about the main algorithm and how to adjust it to your needs you wil
 ## WARNING
 
 ***This is a fully and old personal project without any guarantees - use solely at your own risk! Code may be not optimal. 
-Depends on your configuration, bot may lose all of your deposit! For me it sometimes it was earning, sometimes it was loosing. 
-*** 
+Depends on your configuration, bot may lose all of your deposit! For me it sometimes it was earning, sometimes it was loosing.*** 
 
 Please read `config.toml` before you will try. 
 
