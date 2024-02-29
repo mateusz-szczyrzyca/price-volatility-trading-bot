@@ -1,0 +1,8 @@
+/target
+.idea
+.vscode
+*.swp
+*.swo
+*.log
+.DS_Store
+bot.log
