@@ -1,0 +1,200 @@
+# !!! WARNING !!!
+#
+# Normally bot starts in "simulation" mode - no real actions have place, but bot shows them in the log. It's recommended to run in this
+# mode for a while to check how bot works and how options from here affect it's actions.
+#
+# To run bot in real trading mode you have to run it with "--real-trading-actions" option. You are doing it in your
+# own responsibility. Do not assign entire wallet to bot, use only fraction to check if it makes sense.
+#
+# This notation |base_starting_assets| means we are refereing to option name "base_starting_assets"
+#
+# !!! WARNING !!!
+
+# our base asset - we use it to buy, and we want to in return
+base_starting_assets = ["USDT"]
+
+# symbols which should not be included in monitoring, put here pairs that binance is going to delist soon to avoid
+# loses
+excluded_symbols = ["BNBUSDT", "YFIIUSDT"]
+
+# same as above but assets only (like "BNB" or "YFII")
+# so if you don't want to trade any pair with "YFII" with the name, no matter if these are XYFII or YFIIX then
+# use this option
+excluded_assets = []
+
+# don't change this if you don't know what are you doing
+exchange_info_apis = ["https://api1.binance.com/api/v3/exchangeInfo", "https://api2.binance.com/api/v3/exchangeInfo",
+"https://api3.binance.com/api/v3/exchangeInfo"]
+
+# how fast (in seconds) bot will update it's data using normal API call to exchangeInfo
+# this should not be very often and there are limits on API calls, most of the data is taken from websocket
+exchange_info_fetch_delay_secs = 600
+
+# !WARNING!
+# how many pairs (for instance: BTCUSDT) bot is allowed to trade simultaneously
+#
+# Beware of opt |start_asset_value| option - to work it correctly you have to poses |base_starting_assets|
+# according to the formula: |start_asset_value| * max_simultaneously_trading_pairs
+#
+# example: if you want spend 100 USDT to trade each pair and you want trade 5 pairs at the same time,
+# you need 100*5 = 500 USDT in your wallet
+max_simultaneously_trading_pairs = 5
+
+# !WARNING!
+# what's the starting asset value - how much of our deposit bot will use for single pair to trade
+starting_asset_value = 100
+
+# period to read "commands" - here "command" mean status file
+cmd_read_period_secs = 30
+cmd_dir = "cmd"
+cmd_stop_and_sell_instantly = "stop-and-sell-instantly"
+cmd_stop_and_limit_sell = "stop-and-limit-sell"
+
+[symbol_monitor]
+# last prices history length for all trading pars
+# data from websocket is received once per second so at least once per second price is added to the beginning of
+# the list
+symbol_price_list_length = 30
+
+# WARNING: NOT IMPLEMENTED YET
+symbol_price_trigger_percent_value_rise_min = 444
+symbol_price_trigger_percent_value_rise_max = 555
+
+# WARNING: NOT IMPLEMENTED YET
+symbol_price_trigger_percent_value_drop = -3.0
+
+# WARNING: NOT IMPLEMENTED YET
+symbol_price_trigger_time_period_secs = 1
+symbol_price_trigger_count_within_period = 1
+
+# WARNING: NOT IMPLEMENTED YET
+prewindow_price_value_rise_min_max_percent = [2, 3]
+prewindow_price_value_drop_min_max_percent = [3, 4]
+prewindow_price_value_monitor_min_max_percent = [-5, 5]
+
+# WARNING: NOT IMPLEMENTED YET
+window_price_value_rise_min_max_percent = [0, 0]
+window_price_value_drop_min_max_percent = [0, 0]
+window_price_value_monitor_min_max_percent = [0, 0]
+
+# WARNING: NOT IMPLEMENTED YET
+postwindow_price_value_rise_min_max_percent = [0, 0]
+postwindow_price_value_drop_min_max_percent = [0, 0]
+postwindow_price_value_monitor_min_max_percent = [0, 0]
+
+# how long we are checking how fast price for specific pair is changing.
+# websocket stream update happens once per second so this is esentially value in seconds
+# variability of the pair is one of the main reason why we should consider specific pair for fast trading
+symbol_price_violatile_check_time_secs = 10
+
+# what's the value of "variability" price of the pair - this value should be larger than |symbol_price_violatile_check_time_secs|
+# because stream is updated every 1 second.
+symbol_price_violatile_required_count = 9
+symbol_stat_list_len = 5
+symbol_stat_list_display_period_secs = 300
+
+[orderbook_monitor]
+# what's allowed difference between possible buy price NOW and the price which was sent by the monitor
+#
+# this option is to prevent "sudden" buy after single non-standard price reading which can happen very often
+# on the exchange.
+allowed_buy_diff_from_symbol_monitor_percent = 1.2
+
+# do not consider a pair to trade if it's price changed more than |ignore_if_percent_profit_changed_more_than_percent|
+# too violatile pairs are too risky to trade even for this bot
+ignore_if_percent_profit_changed_more_than_percent = 1.2
+
+# POSSIBLE BUG: what the hell is this? I'm asking myself! :D
+maximum_count_of_profit_changed_ignored_readings = 30
+
+# |true| means if there is a profit then bot will use this profit/loses for further trades. |false| means that
+# |starting_asset_value| is always used, not more or less
+use_profits_to_trade = false
+
+# before we start to trade a pair, we are checking it's liquidity, here it means spread between bid and ask prices,
+# and this value defines how many such "checks" we are doing before we can draw conclusions
+acceptable_liquidity_count = 9
+
+# exchange comission - don't touch it if you don't know it as invalid value with brake order with "insufficient funds" message
+exchange_comission = 0.1
+
+# absolute minimal profit formula is: |exchange_comission| + |absolute_minimal_profit_over_comission|
+# this is the definition of minimal possible profit considering exchange comission.
+#
+# example: if |exchange_comission| is set to 0.1 and |absolute_minimal_profit_over_comission| is set to 0.4
+# then absolute minimal profit formula is 0.1 + 0.4 = 0.5. So if we bought X for 100 USDT, then 0.5% more is 100.5 USDT
+#
+# setting this value too high will hinder "escape" when it's minimal profit
+absolute_minimal_profit_over_comission = 1.6
+
+# how long each pair should be traded - after this time is passed, bot will try to sell bought symbol,
+time_limit_secs = 300
+
+# if |time_limit_secs| is passed and |time_limit_requires_profit| is set to "true" then any profit which is
+# possible according to the formula: |exchange_comission| + |absolute_minimal_profit_over_comission| is required
+# to sell symbol by bot.
+time_limit_requires_profit = true
+
+# this is the ultimate/final time limit, the time after which a symbol is left in limit order state on exchange
+# and orderbook thread is exiting making trading slot free (but it returns 0 so engine can't add this to the pool).
+#
+# So exchange matching engine will trade when the price reaches value calculated by
+# |ultimate_time_limit_profit_percent|
+# WARNING: NOT IMPLEMENTED YET
+ultimate_time_limit_enabled = true
+ultimate_time_limit_secs = 7200
+ultimate_time_limit_profit_percent = 1
+
+# limit loss: if |true| then sell once loss reaches |loss_limit_percent|
+# example: with |loss_limit_percent| = 2.0 and we bought X for 100 USDT, so bot
+# will sell once values of our X drops to 98 USDT
+loss_limit_enabled = true
+loss_limit_percent = 2.4
+
+# if there is a sudden drop equal or larger than specified percent, then hold on as it's maybe for a while.
+# keep in mind that the condition |loss_limit_percent| < |loss_limit_sudden_drop_to_percent| is here for protect
+# to sell when drop price fluctuation is too sharp (as usuall), but keep in mind, if this drop will persist for
+# longer or it will be growing afterward, then we may end up with a big loss, so be careful here with this option
+loss_limit_sudden_drop_to_percent = 2.9
+
+# what it's our minimal profit in percent.
+# example, if |min_profit_percent| is 2.0, then if we use 100 USDT to buy X, minimal profit it's when our X has
+# the value 102 USDT
+min_profit_percent = 2.0
+
+# if we reach |min_profit_percent| threshold, then SINCE that threshold we check if a drop is
+# about |min_profit_crossed_allowed_drop_percent| - if yes then we instantly sell to save the profit.
+#
+# example: we bought X for 100 USDT, our |min_profit_percent| is set to 2.0 (so 102 USDT). Now if the price defined
+# by |min_profit_percent| (102 USDT) drops by |min_profit_crossed_allowed_drop_percent| (0.5 in our example) then
+# 0.5% from 102 USDT is 0.501 USDT hence 102-0.501=101.490 USDT. So if price of X drops to 101.490 we sell instantly
+# to save the min profit
+#
+# if the price is still growing and reaches even |good_profit_percent| then |min_profit_crossed_allowed_drop_percent| is
+# calculated still from the largest reached value
+min_profit_crossed_allowed_drop_percent = 0.5
+
+# good profit in percent - what does it mean, here 3% means if we have |starting_asset_value| = 100 USDT, then
+# 103 USDT is marked as "good profit". From that point we reached "good profit" and some additional options and thresholds
+# may apply.
+good_profit_percent = 3
+
+# if |good_profit_percent| has been reached previously, how big drop SINCE that moment means instant leave position (sell)
+#
+# example: we bought X for 100 USDT, our |good_profit_percent| was 3 percent, so once we crossed 103 USDT, then
+# this means that |good_profit_percent| has been reached.
+#
+# Now if |good_profit_crossed_allowed_drop_percent| is 2.5 then 2.5% from 103 USDT is 2.575 USDT, so if price of X
+# drops from 103 USDT to 100.425 USDT, then we are selling to keep the profit
+#
+# WARNING: |good_profit_percent| has higher priority than |min_profit_percent| so consider your values to take
+# advantage of both margins instead of disruption them by overlapping values.
+# Consider this: X - |good_profit_crossed_allowed_drop_percent| > X price - |min_profit_crossed_allowed_drop_percent|
+# where X here means USDT price for X
+good_profit_crossed_allowed_drop_percent = 2.5
+
+# how often show reminder trading: how many pairs are being traded, what profits are, etc
+currently_trading_reminder_period_secs = 120
+
+# how long try to wait before try to trading same symbol (assuming same symbol will be pointed by the monitor again)
+break_between_trading_same_symbol_secs = 10

@@ -1,0 +1,24 @@
+refresh_rate: 1 seconds
+appenders:
+  stdout:
+    kind: console
+    encoder:
+      pattern: "[{d(%Y-%m-%d %H:%M:%S)}] [{l}] {M}: {m}{n}"
+  requests:
+    kind: file
+    path: "bot.log"
+    encoder:
+      pattern: "[{d(%Y-%m-%d %H:%M:%S)}] [{l}] {M}: {m}{n}"
+root:
+  level: info
+  appenders:
+    - stdout
+    - requests
+loggers:
+  app::backend::db:
+    level: info
+  app::requests:
+    level: info
+    appenders:
+      - requests
+    additive: false
