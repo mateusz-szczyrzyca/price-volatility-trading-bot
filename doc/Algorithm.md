@@ -30,6 +30,6 @@ Depends on our configuration, we can perform action on exchange if:
 1) `pre_window` and `window` prices dropped withing our limit and `post_window` price is about stable. 
 
 This does not mean later price will be dropping/staying same/rising - it just our conditions when we 
-consider "a good moment" to join the trade this specific pair by bot. Keep in mind the market is 
+consider "the good moment" to join to the trade this specific pair by bot. Keep in mind the market is 
 unpredictable, cryptomarket especially. If this algorithm will work for two pairs, it does not mean it 
 will work for another 2 pairs.

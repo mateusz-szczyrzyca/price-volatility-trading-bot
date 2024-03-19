@@ -57,7 +57,6 @@ pub enum TradingDecision {
     Wait,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, EnumString)]
 pub enum CurrentTradingProfit {
     Unknown,
@@ -65,14 +64,34 @@ pub enum CurrentTradingProfit {
     MinimalProfit,
     GoodProfit,
     Loss,
-    LossTooLarge
+    LossTooLarge,
 }
 
+/*
+SendToTradeDecision is a decision made by symbols monitor whether to send some pair to trade or not.
+To modify this setting, look at config file at [symbols_monitor] section and read desc for *_window_*
+options.
+
+Possible decision:
+- Negative
+  Default decision - this pair should not be sent as does not reach any thresholds
+- MainWindowPositiveAnalysis
+  Pair has the threshold within the specified limit for the main window nevertheless settings for a pre or
+  post window.
+ */
+#[derive(Debug, Clone, PartialEq, Eq, Hash, EnumString)]
+pub enum SendToTradeDecision {
+    Negative,
+    MainWindowPositiveAnalysis,
+    MainWindowAndPreWindowPositiveAnalysis,
+    MainWindowAndPostWindowPositiveAnalysis,
+    MainWindowAndBothWindowsPositiveAnalysis,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, EnumString)]
 pub enum ReadMarketDepthNow {
     YES,
-    NO
+    NO,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, EnumString)]

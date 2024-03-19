@@ -220,30 +220,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bot"
-version = "0.9.0"
-dependencies = [
- "binance",
- "chrono",
- "clap",
- "env_logger",
- "hex",
- "log",
- "log4rs",
- "rand",
- "rayon",
- "reqwest",
- "rust_decimal",
- "rust_decimal_macros",
- "serde",
- "serde_json",
- "strum",
- "strum_macros",
- "tokio",
- "toml",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1234,6 +1210,30 @@ name = "ppv-lite86"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
+
+[[package]]
+name = "price-volatility-trading-bot"
+version = "0.9.1"
+dependencies = [
+ "binance",
+ "chrono",
+ "clap",
+ "env_logger",
+ "hex",
+ "log",
+ "log4rs",
+ "rand",
+ "rayon",
+ "reqwest",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "tokio",
+ "toml",
+]
 
 [[package]]
 name = "proc-macro-crate"
