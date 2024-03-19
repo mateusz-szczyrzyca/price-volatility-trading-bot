@@ -21,11 +21,11 @@ Depends on your configuration, bot may lose all of your deposit! For me it somet
 Please read `config.toml` before you will try. 
 
 By default, bot starts in simulation mode which only "simulates" real action. This mode is recommended for new users to study how 
-bot trades. Simulation does not perform any real action on the exchange - it just inform what bot WOULD do if it would be in real trading mode. 
+bot trades. Simulation does not perform any real action on the exchange - it just informs what bot WOULD do if it was in real trading mode. 
 
 Keep in mind that some real action can/can't be executed on exchange for various reasons, including bugs in this software, hence 
 simulation mode can't simulate 100% of cases as binance matching engine it's a 3rd party provider which acts here as a blackbox. 
-Hence scenarios shown in simulation mode may/may not happen while real tradings.
+Hence, scenarios shown in simulation mode may/may not happen while real tradings.
 
 There are some cases that are not supported yet, but are critical for your investment, the most notable: avoiding pairs which are 
 about to be delisted soon. Bot sees big prices variations in such pairs and may trade them because of that. But when delisting 

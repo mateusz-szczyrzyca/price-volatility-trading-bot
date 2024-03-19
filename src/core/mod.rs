@@ -3,6 +3,8 @@ pub mod cli;
 pub mod engine;
 pub mod json;
 pub mod pre_window_monitor;
+pub mod window_monitor;
+pub mod post_window_monitor;
 pub mod prices;
 pub mod structs;
 pub mod trading;
