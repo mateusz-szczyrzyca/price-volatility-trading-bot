@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 pub struct WindowStatus {
     pub symbols_window_with_percent_changes: Rc<Cell<HashMap<String, Decimal>>>,
+    pub percent_change: Decimal,
     pub monitor_threshold_reached: bool,
     pub rise_threshold_reached: bool,
     pub drop_threshold_reached: bool,
@@ -67,6 +68,7 @@ pub fn calculate_window(
 
     let mut window_status = WindowStatus {
         symbols_window_with_percent_changes: Rc::new(Cell::new(Default::default())),
+        percent_change: percent_change_window,
         monitor_threshold_reached: false,
         rise_threshold_reached: false,
         drop_threshold_reached: false,

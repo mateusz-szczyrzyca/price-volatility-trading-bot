@@ -71,22 +71,22 @@ symbol_price_trigger_count_within_period = 1
 
 # pre_window is "a" part from [a|b|c] window and analysis this part is optional,
 # can be turned off with |pre_window_analysis| option
-pre_window_analysis = true
+pre_window_analysis = false
 pre_window_price_value_rise_min_max_percent = [1, 3]
-pre_window_price_value_drop_min_max_percent = [1, 4]
-pre_window_price_value_monitor_min_max_percent = [1, 5]
+pre_window_price_value_drop_min_max_percent = [1, 3]
+pre_window_price_value_monitor_min_max_percent = [1, 3]
 
 # window analysis is mandatory
-window_price_value_rise_min_max_percent = [1, 3]
-window_price_value_drop_min_max_percent = [1, 3]
-window_price_value_monitor_min_max_percent = [1, 5]
+window_price_value_rise_min_max_percent = [3, 5]
+window_price_value_drop_min_max_percent = [5, 8]
+window_price_value_monitor_min_max_percent = [2, 4]
 
 # post_window is "c" part from [a|b|c] window and analysis this part is optional,
 # can be turned off with |post_window_analysis| option
-post_window_analysis = true
+post_window_analysis = false
 post_window_price_value_rise_min_max_percent = [1, 3]
-post_window_price_value_drop_min_max_percent = [1, 4]
-post_window_price_value_monitor_min_max_percent = [1, 5]
+post_window_price_value_drop_min_max_percent = [1, 3]
+post_window_price_value_monitor_min_max_percent = [1, 3]
 
 # how long we are checking how fast price for specific pair is changing.
 # websocket stream update happens once per second so this is esentially value in seconds
@@ -200,7 +200,7 @@ good_profit_percent = 3
 good_profit_crossed_allowed_drop_percent = 2.5
 
 # how often show reminder trading: how many pairs are being traded, what profits are, etc
-currently_trading_reminder_period_secs = 120
+currently_trading_reminder_period_secs = 300
 
 # how long try to wait before try to trading same symbol (assuming same symbol will be pointed by the monitor again)
 break_between_trading_same_symbol_secs = 10

@@ -291,8 +291,9 @@ pub fn all_trades_websocket(
                                     // symbols_currently_selected_to_monitor.insert()
                                     if !symbols_currently_selected_to_monitor.contains_key(&symbol)
                                     {
-                                        // FIXME: what percent to enter here?
-                                        symbols_currently_selected_to_monitor.insert(symbol, window_status.);
+                                        let s = symbol.clone();
+                                        symbols_currently_selected_to_monitor
+                                            .insert(s, window_status.percent_change);
                                     }
                                 }
                                 SendToTradeDecision::Negative => {
@@ -360,15 +361,18 @@ pub fn all_trades_websocket(
                                 Instant::now(),
                                 Decimal::from_str(event_price.as_str()).unwrap(),
                             );
-                            info!("{symbol}: new remembered symbol [price: {price_now}, v: {v}]");
                             remembered_symbols.insert(symbol.to_string(), val);
                         }
 
                         let to_send = (Symbol(k.clone()), price_now);
 
-                        let volatility_count = *symbols_variability_count
-                            .get(symbol.to_string().clone().as_str())
-                            .unwrap();
+                        if !symbols_variability_count.contains_key(symbol.as_str()) {
+                            // we don't have variability data yet
+                            continue;
+                        }
+
+                        let volatility_count =
+                            *symbols_variability_count.get(symbol.as_str()).unwrap();
 
                         let percent = v.round_dp_with_strategy(2, RoundingStrategy::ToZero);
 
