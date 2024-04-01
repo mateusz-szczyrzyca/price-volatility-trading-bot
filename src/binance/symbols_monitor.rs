@@ -1,11 +1,13 @@
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use crate::config::settings::ConfigStruct;
+use crate::core::post_window_monitor::calculate_post_window;
 use crate::core::pre_window_monitor::calculate_pre_window;
-use crate::core::types::Symbol;
+use crate::core::types::{SendToTradeDecision, Symbol};
+use crate::core::window_monitor::calculate_window;
 use binance::websockets::{WebSockets, WebsocketEvent};
 use log::{error, info};
 use rust_decimal::{Decimal, RoundingStrategy};
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ops::Not;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -24,20 +26,25 @@ pub fn all_trades_websocket(
     let mut initial_time_passed = false;
 
     let mut prices_map: HashMap<String, Vec<Decimal>> = HashMap::new();
-    let mut symbols_currently_selected_to_monitor: HashMap<Decimal, String> = HashMap::new();
-    let mut symbols_prewindow_with_percent_changes: Rc<Cell<HashMap<String, Decimal>>> = Rc::new(Cell::new(HashMap::new()));
+    let mut symbols_currently_selected_to_monitor: HashMap<String, Decimal> = HashMap::new();
+    let mut symbols_pre_window_with_percent_changes: Rc<Cell<HashMap<String, Decimal>>> =
+        Rc::new(Cell::new(HashMap::new()));
+    let mut symbols_window_with_percent_changes: Rc<Cell<HashMap<String, Decimal>>> =
+        Rc::new(Cell::new(HashMap::new()));
+    let mut symbols_post_window_with_percent_changes: Rc<Cell<HashMap<String, Decimal>>> =
+        Rc::new(Cell::new(HashMap::new()));
 
-    let mut symbols_displayed: HashMap<String, bool> = HashMap::new();
     let mut list_valid_symbols = HashMap::new();
     let mut remembered_symbols: HashMap<String, (Instant, Decimal)> = HashMap::new();
-    let mut symbols_sent: HashMap<Symbol, bool> = HashMap::new();
 
+    // WARN: the following not used yet
+    let mut symbols_already_sent: HashMap<Symbol, bool> = HashMap::new();
     let mut temp_monitored_symbols: HashMap<String, (Instant, Decimal)> = HashMap::new();
     let mut biggest_monitored: HashMap<String, Decimal> = HashMap::new();
 
     // variability of symbols
     let mut symbols_vars_timestamps: HashMap<String, Instant> = HashMap::new();
-    let mut symbols_var_count: HashMap<String, u64> = HashMap::new();
+    let mut symbols_variability_count: HashMap<String, u64> = HashMap::new();
     let mut symbols_var_last_key: HashMap<String, String> = HashMap::new();
 
     let keep_running = AtomicBool::new(true); // Used to control the event loop
@@ -89,7 +96,7 @@ pub fn all_trades_websocket(
                             tick_event.volume
                         );
 
-                        if symbols_var_count.contains_key(symbol.as_str()) {
+                        if symbols_variability_count.contains_key(symbol.as_str()) {
                             // maps already contain this symbol
 
                             // get key of this symbol to compare with new one
@@ -114,20 +121,20 @@ pub fn all_trades_websocket(
                                     >= config.symbol_monitor.symbol_price_violatile_check_time_secs
                                 {
                                     // timeout - reset to timer and counts
-                                    symbols_var_count.insert(symbol.clone(), 1);
+                                    symbols_variability_count.insert(symbol.clone(), 1);
                                     symbols_vars_timestamps.insert(symbol.clone(), Instant::now());
                                 } else {
                                     // still no timeout, still in assessment window - update volatility counter
-                                    *symbols_var_count
+                                    *symbols_variability_count
                                         .entry(symbol.clone())
                                         .or_insert_with(|| 1) += 1;
                                 }
                             }
                         }
 
-                        if symbols_var_count.contains_key(symbol.as_str()).not() {
+                        if !symbols_variability_count.contains_key(symbol.as_str()) {
                             // this symbol is NOT YET present in maps - we add with default values
-                            symbols_var_count.insert(symbol.clone(), 1);
+                            symbols_variability_count.insert(symbol.clone(), 1);
                             symbols_var_last_key.insert(symbol.clone(), current_symbol_var_key);
                             symbols_vars_timestamps.insert(symbol.clone(), Instant::now());
                         }
@@ -160,132 +167,285 @@ pub fn all_trades_websocket(
                         let percentage_change_list_length =
                             config.symbol_monitor.symbol_price_list_length;
 
+                        ////////////////////////////////////////////////////////////////////////
+                        ////////////////////////////////////////////////////////////////////////
+                        ////////////////////////////////////////////////////////////////////////
+
                         if new_symbols_percentage_list.len() == percentage_change_list_length {
                             //
                             // we have required count of prices in our list, we can review price changes now
+                            // and divide them for pre, main and post window if needed.
                             //
-                            if initial_time_passed.not() {
+                            if !initial_time_passed {
                                 initial_time_passed = true;
                                 info!("!!! full symbols lists with prices have been created.")
                             }
 
-                            let all = percentage_change_list_length;
+                            let all_symbols_length = percentage_change_list_length;
 
-                            let divider = all / 3;
+                            let mut main_divider = 1;
+                            let mut main_window_divider_start = 0;
+                            let mut main_window_divider_end = all_symbols_length;
+                            let mut pre_window_divider_start = 0;
+                            let mut pre_window_divider_end = all_symbols_length;
+                            let mut post_window_divider_start = 0;
+                            let mut post_window_divider_end = all_symbols_length;
 
-                            let pre_window = &new_symbols_percentage_list[0..divider];
-                            let window = &new_symbols_percentage_list[divider..divider * 2];
-                            let post_window = &new_symbols_percentage_list[divider * 2..all];
+                            if config.symbol_monitor.pre_window_analysis {
+                                main_divider += 1;
+                            }
 
-                            let this_symbol_may_be_sent = false;
+                            if config.symbol_monitor.post_window_analysis {
+                                main_divider += 1;
+                            }
+
+                            if main_divider == 2 {
+                                // either pre or post window is enabled
+
+                                if config.symbol_monitor.pre_window_analysis {
+                                    // only pre window is enabled
+                                    // main window starts from middle, otherwise default value is fine
+                                    main_window_divider_start = all_symbols_length / 2;
+                                    pre_window_divider_end = main_window_divider_start - 1;
+                                }
+
+                                if config.symbol_monitor.post_window_analysis {
+                                    // only post window is enabled
+                                    // main window start from beginning, but ends in the middle
+                                    main_window_divider_end = all_symbols_length / 2;
+                                    post_window_divider_start = main_window_divider_end + 1;
+                                }
+                            }
+
+                            if main_divider == 3 {
+                                // both pre and post window are enabled
+                                pre_window_divider_end = all_symbols_length / main_divider;
+                                main_window_divider_start = pre_window_divider_end + 1;
+                                main_window_divider_end = pre_window_divider_end * 2;
+                                post_window_divider_start = main_window_divider_end + 1;
+                                post_window_divider_end = all_symbols_length;
+                            }
+
+                            // to allow symbol to be sent for trading this is the most important factor
+                            let mut symbol_classify_decision = SendToTradeDecision::Negative;
 
                             //
-                            // BEGIN: pre_window memory
-                            // TODO:
-                            let pre_window_status = calculate_pre_window(
+                            // BEGIN: main window analysis
+                            //
+                            let main_window = &new_symbols_percentage_list
+                                [main_window_divider_start..main_window_divider_end];
+                            let window_status = calculate_window(
                                 config.clone(),
-                                symbol.clone(),
-                                pre_window,
-                                Rc::clone(&symbols_prewindow_with_percent_changes),
+                                symbol.as_str(),
+                                main_window,
+                                Rc::clone(&symbols_window_with_percent_changes),
                             );
 
-                            symbols_prewindow_with_percent_changes =
-                                pre_window_status.symbols_prewindow_with_percent_changes;
+                            symbols_window_with_percent_changes =
+                                window_status.symbols_window_with_percent_changes;
 
-                            if pre_window_status.drop_threshold_reached {
-                                info!("pre window status drop threshold reached!")
+                            if window_status.drop_threshold_reached
+                                || window_status.rise_threshold_reached
+                            {
+                                symbol_classify_decision =
+                                    SendToTradeDecision::MainWindowPositiveAnalysis;
                             }
 
-                            if pre_window_status.rise_threshold_reached {
-                                info!("pre window status rise threshold reached!")
+                            //
+                            // END: main window_memory
+                            //
+
+                            //
+                            // BEGIN: pre_window analysis
+                            //
+                            if config.symbol_monitor.pre_window_analysis
+                                && symbol_classify_decision
+                                    == SendToTradeDecision::MainWindowPositiveAnalysis
+                            {
+                                // main window positive decision has to be true, otherwise we don't
+                                // analyze this as this is supplement for main window
+
+                                let pre_window = &new_symbols_percentage_list
+                                    [pre_window_divider_start..pre_window_divider_end];
+                                let pre_window_status = calculate_pre_window(
+                                    config.clone(),
+                                    symbol.as_str(),
+                                    pre_window,
+                                    Rc::clone(&symbols_pre_window_with_percent_changes),
+                                );
+
+                                symbols_pre_window_with_percent_changes =
+                                    pre_window_status.symbols_pre_window_with_percent_changes;
+
+                                if pre_window_status.drop_threshold_reached
+                                    || pre_window_status.rise_threshold_reached
+                                {
+                                    symbol_classify_decision =
+                                        SendToTradeDecision::MainWindowAndPreWindowPositiveAnalysis;
+                                }
                             }
                             //
-                            // END; pre_window_memory
+                            // END: pre_window analysis
                             //
 
-                            // let add_this_symbol_entry_to_maps;
-
-                            // if (percent_change >= percent_rise_required_to_watch_min
-                            //     && percent_change <= percent_rise_required_to_watch_max)
-                            //     || (percent_change <= percent_drop_required_to_watch)
-                            // {
-                            //     //
-                            //     // we are adding symbols which changes as it crossed our threshold
-                            //     //
-                            //     add_this_symbol_entry_to_maps = true;
                             //
-                            //     if add_this_symbol_entry_to_maps {
-                            //         symbol_price_percentages_list
-                            //             .insert(percent_change, tick_event.symbol.clone());
-                            //     }
-                            // }
-                        }
+                            // BEGIN: post window analysis
+                            //
+                            if config.symbol_monitor.post_window_analysis
+                                && symbol_classify_decision
+                                    == SendToTradeDecision::MainWindowPositiveAnalysis
+                            {
+                                let post_window = &new_symbols_percentage_list
+                                    [post_window_divider_start..post_window_divider_end];
+                                let post_window_status = calculate_post_window(
+                                    config.clone(),
+                                    symbol.as_str(),
+                                    post_window,
+                                    Rc::clone(&symbols_window_with_percent_changes),
+                                );
 
-                        for (k, v) in symbols_currently_selected_to_monitor.iter() {
-                            let key = format!("{}{}", v, k);
+                                symbols_post_window_with_percent_changes =
+                                    post_window_status.symbols_post_window_with_percent_changes;
 
-                            if !symbols_displayed.contains_key(key.as_str()) {
-                                let event_price = tick_event.best_bid.clone();
+                                if post_window_status.drop_threshold_reached
+                                    || post_window_status.rise_threshold_reached
+                                {
+                                    if symbol_classify_decision == SendToTradeDecision::MainWindowAndPreWindowPositiveAnalysis {
+                                        symbol_classify_decision = SendToTradeDecision::MainWindowAndBothWindowsPositiveAnalysis;
+                                    }
 
-                                if remembered_symbols.contains_key(symbol.clone().as_str()) {
-                                    let timestamp_now = Instant::now();
-                                    let (_, old_price) =
-                                        remembered_symbols.get(symbol.as_str()).unwrap();
-                                    let new_price = Decimal::from_str(&event_price).unwrap();
-                                    if old_price < &new_price {
-                                        // if old_price is smaller than new price then refresh this data
-                                        // in the map and refresh timestamp - symbol which price is rising
-                                        // will be kept longer in the list
-                                        let new_tuple = (timestamp_now, *old_price);
-
-                                        *remembered_symbols
-                                            .entry(tick_event.symbol.clone())
-                                            .or_insert_with(|| new_tuple) = new_tuple;
+                                    if symbol_classify_decision
+                                        == SendToTradeDecision::MainWindowPositiveAnalysis
+                                    {
+                                        symbol_classify_decision = SendToTradeDecision::MainWindowAndPostWindowPositiveAnalysis;
                                     }
                                 }
+                            }
+                            //
+                            // END: post window_memory
+                            //
 
-                                if !remembered_symbols.contains_key(symbol.as_str()) {
-                                    let v = (
-                                        Instant::now(),
-                                        Decimal::from_str(event_price.as_str()).unwrap(),
-                                    );
-                                    remembered_symbols.insert(symbol.to_string(), v);
+                            match symbol_classify_decision {
+                                SendToTradeDecision::MainWindowPositiveAnalysis
+                                | SendToTradeDecision::MainWindowAndBothWindowsPositiveAnalysis
+                                | SendToTradeDecision::MainWindowAndPreWindowPositiveAnalysis
+                                | SendToTradeDecision::MainWindowAndPostWindowPositiveAnalysis => {
+                                    // symbol_price_percentages_list.insert(percent_change, tick_event.symbol.clone());
+                                    // symbols_currently_selected_to_monitor.insert()
+                                    if !symbols_currently_selected_to_monitor.contains_key(&symbol)
+                                    {
+                                        let s = symbol.clone();
+                                        symbols_currently_selected_to_monitor
+                                            .insert(s, window_status.percent_change);
+                                    }
                                 }
-
-                                symbols_displayed.insert(key, true);
-
-                                let price_now = Decimal::from_str(event_price.as_str()).unwrap();
-                                let to_send = (Symbol(v.clone()), price_now);
-
-                                let volatility_count = *symbols_var_count
-                                    .get(symbol.to_string().clone().as_str())
-                                    .unwrap();
-
-                                let percent = k.round_dp_with_strategy(2, RoundingStrategy::ToZero);
-
-                                if volatility_count
-                                    >= config.symbol_monitor.symbol_price_violatile_required_count
-                                {
-                                    // this symbol has required volatility - so we will send
-                                    // it
-                                    let msg = to_send.clone();
-                                    info!(
-                                    "{symbol}: sent to engine [price: {price_now}, diff: {percent}, volatility count: {volatility_count}]"
-                                );
-                                    channel_to_engine.send(msg).unwrap();
-
-                                    symbols_sent.insert(symbol_type.clone(), true);
-                                    let time = Instant::now();
-                                    temp_monitored_symbols
-                                        .insert(symbol.clone(), (time, price_now));
-                                    biggest_monitored.insert(symbol.clone(), price_now);
+                                SendToTradeDecision::Negative => {
+                                    if symbols_currently_selected_to_monitor.contains_key(&symbol) {
+                                        // this symbol should be removed from the list as now no thresholds were recorded
+                                        symbols_currently_selected_to_monitor.remove(&symbol);
+                                    }
                                 }
                             }
+                        }
+
+                        // if (percent_change >= percent_rise_required_to_watch_min
+                        //     && percent_change <= percent_rise_required_to_watch_max)
+                        //     || (percent_change <= percent_drop_required_to_watch)
+                        //     if symbol_classify_decision ==
+                        // {
+                        //     //
+                        //     // we are adding symbols which changes as it crossed our threshold
+                        //     //
+                        //     add_this_symbol_entry_to_maps = true;
+                        //
+                        //     if add_this_symbol_entry_to_maps {
+                        //         symbol_price_percentages_list
+                        //             .insert(percent_change, tick_event.symbol.clone());
+                        //     }
+                        // }
+                        ////////////////////////////////////////////////////////////////////////
+                        ////////////////////////////////////////////////////////////////////////
+                        ////////////////////////////////////////////////////////////////////////
+                    }
+
+                    for (k, v) in symbols_currently_selected_to_monitor.iter() {
+                        let key = format!("{}{}", k, v);
+
+                        let event_price = tick_event.best_bid.clone();
+
+                        if remembered_symbols.contains_key(&symbol) {
+                            // we have this symbol so we check if it's price needs to be updated
+                            let timestamp_now = Instant::now();
+
+                            // take old price from remembered hashmap
+                            let (_, old_price) = remembered_symbols.get(symbol.as_str()).unwrap();
+
+                            // new price directly from stream
+                            let new_price = Decimal::from_str(&event_price).unwrap();
+
+                            if old_price < &new_price {
+                                // if old_price is smaller than new price then refresh this data
+                                // in the map and refresh timestamp - symbol which price is rising
+                                // will be kept longer in the list
+                                let new_tuple = (timestamp_now, *old_price);
+
+                                // update hashmap
+                                *remembered_symbols
+                                    .entry(tick_event.symbol.clone())
+                                    .or_insert_with(|| new_tuple) = new_tuple;
+                            }
+                        }
+
+                        let price_now = Decimal::from_str(event_price.as_str()).unwrap();
+
+                        if !remembered_symbols.contains_key(symbol.as_str()) {
+                            // here we are if we don't know this symbol yet - so add this
+                            let val = (
+                                Instant::now(),
+                                Decimal::from_str(event_price.as_str()).unwrap(),
+                            );
+                            remembered_symbols.insert(symbol.to_string(), val);
+                        }
+
+                        let to_send = (Symbol(k.clone()), price_now);
+
+                        if !symbols_variability_count.contains_key(symbol.as_str()) {
+                            // we don't have variability data yet
+                            continue;
+                        }
+
+                        let volatility_count =
+                            *symbols_variability_count.get(symbol.as_str()).unwrap();
+
+                        let percent = v.round_dp_with_strategy(2, RoundingStrategy::ToZero);
+
+                        if volatility_count
+                            >= config.symbol_monitor.symbol_price_violatile_required_count
+                        {
+                            // ############################################################## //
+                            // ############################################################## //
+                            // ############################################################## //
+
+                            // this symbol has required volatility - so we will send
+                            // it now
+                            let msg = to_send.clone();
+                            info!(
+                                    "{symbol}: sent to engine [price: {price_now}, diff: {percent}, volatility count: {volatility_count}]"
+                                );
+                            channel_to_engine.send(msg).unwrap();
+
+                            symbols_already_sent.insert(symbol_type.clone(), true);
+                            let time = Instant::now();
+                            temp_monitored_symbols.insert(symbol.clone(), (time, price_now));
+                            biggest_monitored.insert(symbol.clone(), price_now);
+
+                            // ############################################################## //
+                            // ############################################################## //
+                            // ############################################################## //
                         }
                     }
                 }
-            }
-
+            };
             Ok(())
         });
 

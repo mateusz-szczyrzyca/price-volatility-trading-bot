@@ -32,15 +32,17 @@ pub struct ConfigSymbolMonitor {
     pub symbol_price_violatile_required_count: u64,
     pub symbol_stat_list_len: u64,
     pub symbol_stat_list_display_period_secs: u64,
-    pub prewindow_price_value_rise_min_max_percent: [Decimal; 2],
-    pub prewindow_price_value_drop_min_max_percent: [Decimal; 2],
-    pub prewindow_price_value_monitor_min_max_percent: [Decimal; 2],
+    pub pre_window_analysis: bool,
+    pub pre_window_price_value_rise_min_max_percent: [Decimal; 2],
+    pub pre_window_price_value_drop_min_max_percent: [Decimal; 2],
+    pub pre_window_price_value_monitor_min_max_percent: [Decimal; 2],
     pub window_price_value_rise_min_max_percent: [Decimal; 2],
     pub window_price_value_drop_min_max_percent: [Decimal; 2],
     pub window_price_value_monitor_min_max_percent: [Decimal; 2],
-    pub postwindow_price_value_rise_min_max_percent: [Decimal; 2],
-    pub postwindow_price_value_drop_min_max_percent: [Decimal; 2],
-    pub postwindow_price_value_monitor_min_max_percent: [Decimal; 2],
+    pub post_window_analysis: bool,
+    pub post_window_price_value_rise_min_max_percent: [Decimal; 2],
+    pub post_window_price_value_drop_min_max_percent: [Decimal; 2],
+    pub post_window_price_value_monitor_min_max_percent: [Decimal; 2],
 }
 
 #[derive(Deserialize, Debug, Clone)]

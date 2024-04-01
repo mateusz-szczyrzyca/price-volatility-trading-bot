@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::binance::orderbook::orderbook_executor;
 use crate::config::settings::{ConfigStruct, CONFIG_FILENAME};
 use crate::core::calc::percent_diff;
@@ -8,6 +7,7 @@ use crate::core::types::{KlineSignal, OrderBookCmd, Symbol, SymbolAction, Tradin
 use log::{info, warn};
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::{Decimal, RoundingStrategy};
+use std::collections::HashMap;
 use std::fs;
 use std::ops::Not;
 use std::path::Path;
@@ -45,6 +45,7 @@ pub async fn engine(
     let mut currently_trading_pairs = 0;
     let mut currently_trading_reminder_time = Instant::now();
     let mut symbols_traded_recently: HashMap<Symbol, Instant> = HashMap::new();
+    let mut symbols_trades_recently_msg: HashMap<Symbol, bool> = HashMap::new();
     let mut previous_cmd_read_time = Instant::now();
     let mut stop_accepting_symbols = false;
 
@@ -217,10 +218,15 @@ pub async fn engine(
                         .break_between_trading_same_symbol_secs
                 {
                     symbol_is_allowed_to_trade_now = false;
-                    warn!("{symbol} REJECTED: delay between past and next trading for this symbol is still in force.")
+
+                    if !symbols_trades_recently_msg.contains_key(&symbol.clone()) {
+                        warn!("{symbol} REJECTED: delay between past and next trading for this symbol is still in force.");
+                        symbols_trades_recently_msg.insert(symbol.clone(), true);
+                    }
                 } else {
                     // remove
                     symbols_traded_recently.remove(&symbol.clone());
+                    symbols_trades_recently_msg.remove(&symbol.clone());
                 }
             }
 
