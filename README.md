@@ -1,9 +1,8 @@
 ## WARNING
 
-***This is a fully and old personal project without any guarantees - use solely at your own risk! Code may be not
-optimal.
-Depends on your configuration, bot may lose all of your deposit! For me it sometimes it was earning, sometimes it was
-loosing.***
+***This is an old personal project without any guarantees - use solely at your own risk! Code may be not
+optimal and may improve over time.
+Depends on your configuration, bot may lose all of your deposit! For me sometimes it was profitable, sometimes wasn't.***
 
 Please read `config.toml` and `doc/` before you will try to use this software.
 
