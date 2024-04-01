@@ -38,7 +38,7 @@ exchange_info_fetch_delay_secs = 600
 #
 # example: if you want spend 100 USDT to trade each pair and you want trade 5 pairs at the same time,
 # you need 100*5 = 500 USDT in your wallet
-max_simultaneously_trading_pairs = 5
+max_simultaneously_trading_pairs = 2
 
 # !WARNING!
 # what's the starting asset value - how much of our deposit bot will use for single pair to trade
@@ -69,6 +69,8 @@ symbol_price_trigger_percent_value_drop = -3.0
 symbol_price_trigger_time_period_secs = 1
 symbol_price_trigger_count_within_period = 1
 
+# Windows analys
+
 # pre_window is "a" part from [a|b|c] window and analysis this part is optional,
 # can be turned off with |pre_window_analysis| option
 pre_window_analysis = false
@@ -76,14 +78,14 @@ pre_window_price_value_rise_min_max_percent = [1, 3]
 pre_window_price_value_drop_min_max_percent = [1, 3]
 pre_window_price_value_monitor_min_max_percent = [1, 3]
 
-# window analysis is mandatory
-window_price_value_rise_min_max_percent = [3, 5]
-window_price_value_drop_min_max_percent = [5, 8]
-window_price_value_monitor_min_max_percent = [2, 4]
+# window analysis is mandatory - this is "b" part from [a|b|c]
+window_price_value_rise_min_max_percent = [1, 5]
+window_price_value_drop_min_max_percent = [3, 6]
+window_price_value_monitor_min_max_percent = [1, 4]
 
 # post_window is "c" part from [a|b|c] window and analysis this part is optional,
 # can be turned off with |post_window_analysis| option
-post_window_analysis = false
+post_window_analysis = true
 post_window_price_value_rise_min_max_percent = [1, 3]
 post_window_price_value_drop_min_max_percent = [1, 3]
 post_window_price_value_monitor_min_max_percent = [1, 3]

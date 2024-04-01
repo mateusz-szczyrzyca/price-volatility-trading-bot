@@ -1,18 +1,21 @@
-use std::cell::Cell;
-use std::collections::HashMap;
 use crate::binance::prices::{process_symbol_price, process_symbol_qty};
 use crate::binance::trading::{reverse_symbol_action, symbol_buy_or_sell};
 use crate::config::settings::ConfigStruct;
 use crate::core::calc::{calculate_exit_qty, percent_diff};
 use crate::core::structs::OrderBookCommand;
 use crate::core::trading::{check_current_profit_percent, TradingSymbol};
-use crate::core::types::{CurrentTradingProfit, OrderBookCmd, ReadMarketDepthNow, Symbol, SymbolAction, TradingDecision, TradingMode, TradingNextStep};
+use crate::core::types::{
+    CurrentTradingProfit, OrderBookCmd, ReadMarketDepthNow, Symbol, SymbolAction, TradingDecision,
+    TradingMode, TradingNextStep,
+};
 use binance::api::Binance;
 use binance::market::Market;
 use binance::websockets::{WebSockets, WebsocketEvent};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::{Decimal, RoundingStrategy};
+use std::cell::Cell;
+use std::collections::HashMap;
 use std::ops::Not;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -32,7 +35,7 @@ pub fn orderbook_executor(
     trading_mode: TradingMode,
 ) {
     info!("=> starting websocket for: {symbol}");
-    let(api_key, secret_key) = api_keys.clone();
+    let (api_key, secret_key) = api_keys.clone();
     let endpoints =
         [symbol.clone()].map(|symbol| format!("{}@depth@100ms", symbol.to_string().to_lowercase()));
 
@@ -133,10 +136,9 @@ pub fn orderbook_executor(
                         if finishing_action_requested {
                             finish_trading_for_symbol_now = true;
                         }
-                        //
 
                         if trading_symbol.trading_next_step == TradingNextStep::Join
-                            && finishing_action_requested.not()
+                            && !finishing_action_requested
                         {
                             // only analyse bids if we want to enter
                             for ask in depth_order_book.asks {
@@ -167,7 +169,7 @@ pub fn orderbook_executor(
 
                                     if let Some(val) = result {
                                         let s = trading_symbol.qty;
-                                        info!("--> starting_qty: {my_starting_qty}, price: {ask_price}, in struct: {s}. qty_wanted_to_buy: {qty_wanted_to_buy}, val: {val}");
+                                        info!("{symbol} --> starting_qty: {my_starting_qty}, price: {ask_price}, in struct: {s}. qty_wanted_to_buy: {qty_wanted_to_buy}, val: {val}");
                                         qty_wanted_to_buy = val;
                                         best_ask_price = ask_price;
                                         best_ask_qty = ask_qty;
@@ -183,7 +185,8 @@ pub fn orderbook_executor(
                                         {
                                             trading_symbol.trade_decision =
                                                 TradingDecision::Decline;
-                                            final_trade_decision_clone.set(TradingDecision::Decline);
+                                            final_trade_decision_clone
+                                                .set(TradingDecision::Decline);
                                             warn!("{symbol} SPREAD REJECTED: price for buy: {best_ask_price}, price from monitor: {monitored_price}, spread: {price_diff_from_monitor}");
                                             break;
                                         }
@@ -247,10 +250,19 @@ pub fn orderbook_executor(
                         //
                         //
 
+                        debug!(
+                            "{symbol} NOW: best_bid_price: [{best_bid_price}], \
+                        best_bid_qty: [{best_bid_qty}], \
+                         trade_decision: [{:?}], trading_next_step: [{:?}]",
+                            trading_symbol.trade_decision, trading_symbol.trading_next_step
+                        );
+
                         //
                         // BEGIN: starting trading consideration
                         //
-                        if trading_symbol.trade_decision == TradingDecision::Start {
+                        if trading_symbol.trade_decision == TradingDecision::Start
+                            || trading_symbol.trade_decision == TradingDecision::Continue
+                        {
                             // first step
 
                             if trading_symbol.trading_next_step == TradingNextStep::Join {
@@ -277,16 +289,12 @@ pub fn orderbook_executor(
 
                                     // None means we can't use this price so stop processing this
                                     // ***WARN:*** field modification
-                                    trading_symbol.min_profit_price = match process_symbol_price(
+                                    trading_symbol.min_profit_price = process_symbol_price(
                                         trading_symbol.symbol.clone(),
                                         trading_symbol.min_profit_price,
                                         trading_symbol.filters_map.clone(),
-                                    ) {
-                                        Some(v) => v,
-                                        None => {
-                                            decimal_zero
-                                        }
-                                    };
+                                    )
+                                    .unwrap_or_else(|| decimal_zero);
 
                                     // change percent to usable number
                                     let good_percent = config.orderbook_monitor.good_profit_percent
@@ -306,10 +314,11 @@ pub fn orderbook_executor(
                                     ) {
                                         Some(v) => {
                                             // ***WARN:*** field modification
-                                            trading_symbol.trade_decision = TradingDecision::Continue;
+                                            trading_symbol.trade_decision =
+                                                TradingDecision::Continue;
 
                                             v
-                                        },
+                                        }
                                         None => {
                                             // ***WARN:*** field modification
                                             trading_symbol.trade_decision = TradingDecision::Stop;
@@ -350,7 +359,9 @@ pub fn orderbook_executor(
                                         // END: we are trying to buy asset, that may fail if the price moves too quickly
                                         //
 
-                                        if trading_symbol.trade_decision == TradingDecision::Continue {
+                                        if trading_symbol.trade_decision
+                                            == TradingDecision::Continue
+                                        {
                                             // we successfully enter to trade
 
                                             // ***WARN:*** field modification
@@ -377,7 +388,8 @@ pub fn orderbook_executor(
 
                                             // we are entering to trade so we have to set some vars
                                             // ***WARN:*** field modification
-                                            trading_symbol.trading_next_step = TradingNextStep::Leave;
+                                            trading_symbol.trading_next_step =
+                                                TradingNextStep::Leave;
                                             // ***WARN:*** field modification
                                             trading_symbol.trading_started = Instant::now();
                                         }
@@ -410,7 +422,6 @@ pub fn orderbook_executor(
                                 //
                                 //
                                 //
-
                                 if reading_market_depth_this_time == ReadMarketDepthNow::YES {
                                     // ***WARN:*** field modification
                                     trading_symbol.current_profit_percent =
@@ -528,8 +539,7 @@ pub fn orderbook_executor(
 
                                     let log_prefix = format!("[{current_profit_percent}%] [{time_passed_str}] [{symbol}]");
                                     let exit_qty =
-                                        calculate_exit_qty(&config, &trading_symbol)
-                                            .unwrap();
+                                        calculate_exit_qty(&config, &trading_symbol).unwrap();
 
                                     // // //
                                     let my_current_qty = trading_symbol.qty;
@@ -553,7 +563,6 @@ pub fn orderbook_executor(
                                 //
                                 //
                                 //
-
                                 if reading_market_depth_this_time == ReadMarketDepthNow::YES {
                                     //
                                     // not skipped - we can analyse now as data is ok
@@ -607,15 +616,19 @@ pub fn orderbook_executor(
                                     //
                                     // BEGIN: minimal profit
                                     //
-                                    if trading_symbol.current_trading_profit != CurrentTradingProfit::MinimalProfit
-                                        && trading_symbol.current_trading_profit != CurrentTradingProfit::GoodProfit {
+                                    if trading_symbol.current_trading_profit
+                                        != CurrentTradingProfit::MinimalProfit
+                                        && trading_symbol.current_trading_profit
+                                            != CurrentTradingProfit::GoodProfit
+                                    {
                                         //
                                         // min profit price was crossed but not good profit set?
                                         //
                                         if best_price_now >= trading_symbol.min_profit_price {
                                             info!("{log_prefix}: [__MIN__ PROFIT SET] my_used_price: {my_current_qty_price}, best_price now: {best_price_now}");
                                             // ***WARN:*** field modification
-                                            trading_symbol.current_trading_profit = CurrentTradingProfit::MinimalProfit;
+                                            trading_symbol.current_trading_profit =
+                                                CurrentTradingProfit::MinimalProfit;
                                             // ***WARN:*** field modification
                                             trading_symbol.highest_price_since_min_profit =
                                                 best_price_now;
@@ -630,12 +643,15 @@ pub fn orderbook_executor(
                                     //
                                     let mut good_profit_reached = false;
 
-                                    if trading_symbol.current_trading_profit != CurrentTradingProfit::GoodProfit {
+                                    if trading_symbol.current_trading_profit
+                                        != CurrentTradingProfit::GoodProfit
+                                    {
                                         // good profit price?
                                         if best_price_now >= trading_symbol.good_profit_price {
                                             info!("{log_prefix}: [# |GOOD| # PROFIT SET] my_used_price: {my_current_qty_price}, best_price now: {best_price_now}");
                                             // ***WARN:*** field modification
-                                            trading_symbol.current_trading_profit = CurrentTradingProfit::GoodProfit;
+                                            trading_symbol.current_trading_profit =
+                                                CurrentTradingProfit::GoodProfit;
                                             // ***WARN:*** field modification
                                             trading_symbol.highest_price_since_good_profit =
                                                 best_price_now;
@@ -680,11 +696,9 @@ pub fn orderbook_executor(
                                                     .good_profit_crossed_allowed_drop_percent
                                                 && best_price_now >= trading_symbol.min_profit_price
                                             {
-                                                let exit_qty = calculate_exit_qty(
-                                                    &config,
-                                                    &trading_symbol,
-                                                )
-                                                .unwrap();
+                                                let exit_qty =
+                                                    calculate_exit_qty(&config, &trading_symbol)
+                                                        .unwrap();
 
                                                 // // //
                                                 let my_current_qty_price = trading_symbol.price;
@@ -709,8 +723,11 @@ pub fn orderbook_executor(
                                     //
                                     // BEGIN: min profit
                                     //
-                                    if trading_symbol.current_trading_profit == CurrentTradingProfit::MinimalProfit
-                                        && trading_symbol.trade_decision == TradingDecision::Continue // only if no signal to leave
+                                    if trading_symbol.current_trading_profit
+                                        == CurrentTradingProfit::MinimalProfit
+                                        && trading_symbol.trade_decision
+                                            == TradingDecision::Continue
+                                    // only if no signal to leave
                                     {
                                         //
                                         // min profit logic, only if:
@@ -745,11 +762,9 @@ pub fn orderbook_executor(
                                                     .min_profit_crossed_allowed_drop_percent
                                                 && best_price_now > trading_symbol.min_profit_price
                                             {
-                                                let exit_qty = calculate_exit_qty(
-                                                    &config,
-                                                    &trading_symbol,
-                                                )
-                                                .unwrap();
+                                                let exit_qty =
+                                                    calculate_exit_qty(&config, &trading_symbol)
+                                                        .unwrap();
 
                                                 // // //
                                                 let highest_price_since_min_profit =
@@ -779,7 +794,8 @@ pub fn orderbook_executor(
                                     //
                                     if config.orderbook_monitor.loss_limit_enabled // loss limiting is enabled in config
                                         && trading_symbol.trade_decision == TradingDecision::Continue // we continue trade
-                                        && reading_market_depth_this_time == ReadMarketDepthNow::YES // we continue reading market depth
+                                        && reading_market_depth_this_time == ReadMarketDepthNow::YES
+                                    // we continue reading market depth
                                     {
                                         // loss limit logic kicks in if current_profit_percent is negative
                                         if current_profit_percent < decimal_zero {
@@ -802,17 +818,18 @@ pub fn orderbook_executor(
                                                 }
 
                                                 // ***WARN:*** field modification
-                                                trading_symbol.current_trading_profit = CurrentTradingProfit::LossTooLarge;
+                                                trading_symbol.current_trading_profit =
+                                                    CurrentTradingProfit::LossTooLarge;
                                             }
 
-                                            if loss_percent >= config.orderbook_monitor.loss_limit_percent
-                                                && trading_symbol.current_trading_profit == CurrentTradingProfit::LossTooLarge
+                                            if loss_percent
+                                                >= config.orderbook_monitor.loss_limit_percent
+                                                && trading_symbol.current_trading_profit
+                                                    == CurrentTradingProfit::LossTooLarge
                                             {
-                                                let exit_qty = calculate_exit_qty(
-                                                    &config,
-                                                    &trading_symbol,
-                                                )
-                                                .unwrap();
+                                                let exit_qty =
+                                                    calculate_exit_qty(&config, &trading_symbol)
+                                                        .unwrap();
 
                                                 // // //
                                                 info!("{log_prefix} [!!! LOSS LIMIT LEAVE !!!]
@@ -841,7 +858,8 @@ pub fn orderbook_executor(
                                     >= config.orderbook_monitor.time_limit_secs
                                     || trading_symbol.soft_timeout_trading)
                                     && trading_symbol.trade_decision == TradingDecision::Continue // continue to trade
-                                    && reading_market_depth_this_time == ReadMarketDepthNow::YES // continue read market depth
+                                    && reading_market_depth_this_time == ReadMarketDepthNow::YES
+                                // continue read market depth
                                 {
                                     //
                                     // TIMEOUT ESCAPE
@@ -901,7 +919,8 @@ pub fn orderbook_executor(
 
                                     // first we check good profit - highest priority
                                     // if there is good profit - then we can leave with timeout
-                                    if trading_symbol.current_trading_profit == CurrentTradingProfit::GoodProfit
+                                    if trading_symbol.current_trading_profit
+                                        == CurrentTradingProfit::GoodProfit
                                         && trading_symbol.good_profit_price <= best_price
                                     {
                                         // there is good profit indeed - we can leave now because of timeout
@@ -913,7 +932,8 @@ pub fn orderbook_executor(
                                         // enter here if: NO good_profit
                                         // no good profit - check now min profit, maybe it's applicable
                                         //
-                                        if trading_symbol.current_trading_profit == CurrentTradingProfit::MinimalProfit
+                                        if trading_symbol.current_trading_profit
+                                            == CurrentTradingProfit::MinimalProfit
                                             && trading_symbol.min_profit_price <= best_price
                                         {
                                             // there is min profit - we can leave now because of timeout
@@ -946,11 +966,8 @@ pub fn orderbook_executor(
                                     if best_price > decimal_zero && we_can_leave_with_profit {
                                         // LEAVE action can happen here after timeout
 
-                                        let exit_qty = calculate_exit_qty(
-                                            &config,
-                                            &trading_symbol,
-                                        )
-                                        .unwrap();
+                                        let exit_qty =
+                                            calculate_exit_qty(&config, &trading_symbol).unwrap();
 
                                         // // //
                                         let highest_price_since_min_profit =
@@ -980,6 +997,7 @@ pub fn orderbook_executor(
                         }
 
                         if finish_trading_for_symbol_now {
+                            info!("{symbol}: finishing trading now...");
                             // symbol action
                             let (received_qty, _) = symbol_buy_or_sell(
                                 &config,
@@ -1054,5 +1072,4 @@ pub fn orderbook_executor(
 
         break;
     }
-
 }

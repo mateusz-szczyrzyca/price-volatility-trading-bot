@@ -183,7 +183,48 @@ pub fn all_trades_websocket(
 
                             let all_symbols_length = percentage_change_list_length;
 
-                            let divider = all_symbols_length / 3;
+                            let mut main_divider = 1;
+                            let mut main_window_divider_start = 0;
+                            let mut main_window_divider_end = all_symbols_length;
+                            let mut pre_window_divider_start = 0;
+                            let mut pre_window_divider_end = all_symbols_length;
+                            let mut post_window_divider_start = 0;
+                            let mut post_window_divider_end = all_symbols_length;
+
+                            if config.symbol_monitor.pre_window_analysis {
+                                main_divider += 1;
+                            }
+
+                            if config.symbol_monitor.post_window_analysis {
+                                main_divider += 1;
+                            }
+
+                            if main_divider == 2 {
+                                // either pre or post window is enabled
+
+                                if config.symbol_monitor.pre_window_analysis {
+                                    // only pre window is enabled
+                                    // main window starts from middle, otherwise default value is fine
+                                    main_window_divider_start = all_symbols_length / 2;
+                                    pre_window_divider_end = main_window_divider_start - 1;
+                                }
+
+                                if config.symbol_monitor.post_window_analysis {
+                                    // only post window is enabled
+                                    // main window start from beginning, but ends in the middle
+                                    main_window_divider_end = all_symbols_length / 2;
+                                    post_window_divider_start = main_window_divider_end + 1;
+                                }
+                            }
+
+                            if main_divider == 3 {
+                                // both pre and post window are enabled
+                                pre_window_divider_end = all_symbols_length / main_divider;
+                                main_window_divider_start = pre_window_divider_end + 1;
+                                main_window_divider_end = pre_window_divider_end * 2;
+                                post_window_divider_start = main_window_divider_end + 1;
+                                post_window_divider_end = all_symbols_length;
+                            }
 
                             // to allow symbol to be sent for trading this is the most important factor
                             let mut symbol_classify_decision = SendToTradeDecision::Negative;
@@ -191,7 +232,8 @@ pub fn all_trades_websocket(
                             //
                             // BEGIN: main window analysis
                             //
-                            let main_window = &new_symbols_percentage_list[divider..divider * 2];
+                            let main_window = &new_symbols_percentage_list
+                                [main_window_divider_start..main_window_divider_end];
                             let window_status = calculate_window(
                                 config.clone(),
                                 symbol.as_str(),
@@ -223,7 +265,8 @@ pub fn all_trades_websocket(
                                 // main window positive decision has to be true, otherwise we don't
                                 // analyze this as this is supplement for main window
 
-                                let pre_window = &new_symbols_percentage_list[0..divider];
+                                let pre_window = &new_symbols_percentage_list
+                                    [pre_window_divider_start..pre_window_divider_end];
                                 let pre_window_status = calculate_pre_window(
                                     config.clone(),
                                     symbol.as_str(),
@@ -252,8 +295,8 @@ pub fn all_trades_websocket(
                                 && symbol_classify_decision
                                     == SendToTradeDecision::MainWindowPositiveAnalysis
                             {
-                                let post_window =
-                                    &new_symbols_percentage_list[divider..divider * 2];
+                                let post_window = &new_symbols_percentage_list
+                                    [post_window_divider_start..post_window_divider_end];
                                 let post_window_status = calculate_post_window(
                                     config.clone(),
                                     symbol.as_str(),
