@@ -39,7 +39,7 @@ happens you will end up with unusable pair in your wallet (on binance) - so keep
 current
 version of the bot you have to check this delisting plans by yourself unless bot may "stuck" with useless pair.
 
-Generally investing in cryptocurrencies is very risky and don't do it if you don't accept huge risk of loses.
+**Generally investing in cryptocurrencies is very risky and don't do it if you don't accept huge risk of loses.**
 
 In the config file you will find information how to run bot in real trading mode if you still interested in taking such
 risk.
